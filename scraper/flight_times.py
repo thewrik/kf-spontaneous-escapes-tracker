@@ -5,7 +5,7 @@ Accepts a list of flight numbers and returns a dict mapping each flight number
 to its schedule (dep, arr, dur).
 
 Priority:
-  1. AviationStack API (if AVIATIONSTACK_API_KEY env var is set)
+  1. AeroDataBox API via RapidAPI (if RAPIDAPI_KEY env var is set)
   2. Fall back to existing schedules from data/flights.json
 
 Usage:
@@ -19,6 +19,8 @@ import json
 import logging
 import os
 import re
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -26,100 +28,110 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-AVIATIONSTACK_BASE = "http://api.aviationstack.com/v1/flights"
+AERODATABOX_BASE = "https://aerodatabox.p.rapidapi.com/flights/number"
+AERODATABOX_HOST = "aerodatabox.p.rapidapi.com"
 DATA_JSON_PATH = Path(__file__).parent.parent / "data" / "flights.json"
 
 
-def _fetch_from_aviationstack(
-    flight_numbers: list[str], api_key: str
-) -> dict[str, dict]:
-    """
-    Query AviationStack for each flight number (free tier: one at a time).
-    Returns a partial dict of flight_number → {dep, arr, dur}.
-    """
-    results: dict[str, dict] = {}
-
-    for fn in flight_numbers:
-        # AviationStack uses airline IATA + flight number, e.g. 'SQ950'
-        airline_iata = re.match(r"^([A-Z]{2})", fn)
-        if not airline_iata:
-            continue
-        params = {
-            "access_key": api_key,
-            "flight_iata": fn,
-            "limit": 1,
-        }
-        try:
-            resp = requests.get(AVIATIONSTACK_BASE, params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-
-            flights = data.get("data", [])
-            if not flights:
-                logger.debug("AviationStack: no data for %s", fn)
-                continue
-
-            flight = flights[0]
-            dep_time = (
-                flight.get("departure", {}).get("scheduled") or
-                flight.get("departure", {}).get("estimated") or ""
-            )
-            arr_time = (
-                flight.get("arrival", {}).get("scheduled") or
-                flight.get("arrival", {}).get("estimated") or ""
-            )
-
-            # Convert ISO 8601 → "HH:MM"
-            dep_hhmm = _iso_to_hhmm(dep_time)
-            arr_hhmm = _iso_to_hhmm(arr_time)
-            dur = _calc_duration(dep_time, arr_time)
-
-            if dep_hhmm and arr_hhmm:
-                results[fn] = {"dep": dep_hhmm, "arr": arr_hhmm, "dur": dur}
-                logger.debug("AviationStack: got schedule for %s: %s→%s", fn, dep_hhmm, arr_hhmm)
-            else:
-                logger.debug("AviationStack: incomplete times for %s", fn)
-        except requests.RequestException as exc:
-            logger.warning("AviationStack request failed for %s: %s", fn, exc)
-        except Exception as exc:
-            logger.warning("AviationStack parse error for %s: %s", fn, exc)
-
-    return results
-
-
-def _iso_to_hhmm(iso: str) -> Optional[str]:
-    """Convert ISO 8601 datetime string to 'HH:MM'."""
-    if not iso:
+def _parse_local_hhmm(time_str: str) -> Optional[str]:
+    """Extract HH:MM from AeroDataBox local time like '2026-05-01 06:20+08:00'."""
+    if not time_str:
         return None
-    match = re.search(r"T(\d{2}:\d{2})", iso)
+    match = re.search(r"(\d{2}:\d{2})(?:[+-]\d{2}:\d{2}|Z)?$", time_str)
     if match:
         return match.group(1)
-    # Try bare time
-    match = re.search(r"(\d{2}:\d{2})", iso)
+    match = re.search(r"\s(\d{2}:\d{2})", time_str)
     if match:
         return match.group(1)
     return None
 
 
-def _calc_duration(dep_iso: str, arr_iso: str) -> str:
-    """Calculate flight duration from two ISO timestamps."""
+def _parse_utc_dt(time_str: str) -> Optional[datetime]:
+    """Parse AeroDataBox UTC time like '2026-05-01 22:20Z' into a datetime."""
+    if not time_str:
+        return None
+    clean = time_str.replace("Z", "+00:00").strip()
+    # '2026-05-01 22:20+00:00' → replace space with T for fromisoformat
+    clean = re.sub(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})", r"\1T\2", clean)
     try:
-        from datetime import datetime, timezone
-        fmt = "%Y-%m-%dT%H:%M:%S%z"
-        # Remove sub-seconds
-        dep_clean = re.sub(r"\.\d+", "", dep_iso)
-        arr_clean = re.sub(r"\.\d+", "", arr_iso)
-        dep_dt = datetime.fromisoformat(dep_clean)
-        arr_dt = datetime.fromisoformat(arr_clean)
-        diff = arr_dt - dep_dt
-        total_minutes = int(diff.total_seconds() / 60)
-        if total_minutes < 0:
-            total_minutes += 24 * 60  # next-day arrival
-        hours = total_minutes // 60
-        mins = total_minutes % 60
-        return f"{hours}h {str(mins).zfill(2)}m"
-    except Exception:
+        return datetime.fromisoformat(clean)
+    except ValueError:
+        return None
+
+
+def _calc_duration(dep_utc: str, arr_utc: str) -> str:
+    """Calculate flight duration from two UTC time strings."""
+    dep_dt = _parse_utc_dt(dep_utc)
+    arr_dt = _parse_utc_dt(arr_utc)
+    if not dep_dt or not arr_dt:
         return ""
+    diff = arr_dt - dep_dt
+    if diff.total_seconds() < 0:
+        diff += timedelta(days=1)
+    total_minutes = int(diff.total_seconds() / 60)
+    return f"{total_minutes // 60}h {str(total_minutes % 60).zfill(2)}m"
+
+
+def _fetch_from_aerodatabox(flight_numbers: list[str], api_key: str) -> dict[str, dict]:
+    """
+    Query AeroDataBox for each flight number.
+    Returns a partial dict of flight_number → {dep, arr, dur}.
+
+    dep/arr are local times at origin/destination airports (HH:MM).
+    dur is calculated from UTC timestamps for accuracy.
+    """
+    results: dict[str, dict] = {}
+    headers = {
+        "X-RapidAPI-Key": api_key,
+        "X-RapidAPI-Host": AERODATABOX_HOST,
+    }
+
+    for fn in flight_numbers:
+        url = f"{AERODATABOX_BASE}/{fn}"
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 404:
+                logger.debug("AeroDataBox: no data for %s", fn)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Response is a list of flights; take the first scheduled one
+            flights = data if isinstance(data, list) else data.get("items", [])
+            if not flights:
+                logger.debug("AeroDataBox: empty response for %s", fn)
+                continue
+
+            flight = flights[0]
+            dep_local = (
+                flight.get("departure", {}).get("scheduledTime", {}).get("local") or
+                flight.get("departure", {}).get("scheduledTime", {}).get("utc") or ""
+            )
+            arr_local = (
+                flight.get("arrival", {}).get("scheduledTime", {}).get("local") or
+                flight.get("arrival", {}).get("scheduledTime", {}).get("utc") or ""
+            )
+            dep_utc = flight.get("departure", {}).get("scheduledTime", {}).get("utc", "")
+            arr_utc = flight.get("arrival", {}).get("scheduledTime", {}).get("utc", "")
+
+            dep_hhmm = _parse_local_hhmm(dep_local)
+            arr_hhmm = _parse_local_hhmm(arr_local)
+            dur = _calc_duration(dep_utc, arr_utc)
+
+            if dep_hhmm and arr_hhmm:
+                results[fn] = {"dep": dep_hhmm, "arr": arr_hhmm, "dur": dur}
+                logger.debug("AeroDataBox: %s %s→%s (%s)", fn, dep_hhmm, arr_hhmm, dur)
+            else:
+                logger.debug("AeroDataBox: incomplete times for %s", fn)
+
+        except requests.RequestException as exc:
+            logger.warning("AeroDataBox request failed for %s: %s", fn, exc)
+        except Exception as exc:
+            logger.warning("AeroDataBox parse error for %s: %s", fn, exc)
+        finally:
+            time.sleep(0.5)
+
+    return results
 
 
 def _load_existing_schedules() -> dict[str, dict]:
@@ -143,9 +155,8 @@ def get_schedules(
     """
     Return flight schedules for the given flight numbers.
 
-    If AVIATIONSTACK_API_KEY is set as an environment variable, queries the
-    AviationStack API for live schedule data. Unknown flights fall back to the
-    existing_schedules dict (or data/flights.json if existing_schedules is None).
+    If RAPIDAPI_KEY is set, queries AeroDataBox for live schedule data.
+    Unknown flights fall back to existing_schedules (or data/flights.json).
 
     Args:
         flight_numbers: List of IATA flight identifiers, e.g. ["SQ950", "TR282"].
@@ -155,23 +166,23 @@ def get_schedules(
     Returns:
         Dict mapping every input flight number that has schedule data to
         {"dep": "HH:MM", "arr": "HH:MM", "dur": "Xh YYm"}.
+        dep/arr are local times at origin/destination airports respectively.
     """
     if existing_schedules is None:
         existing_schedules = _load_existing_schedules()
 
-    api_key = os.environ.get("AVIATIONSTACK_API_KEY", "").strip()
+    api_key = os.environ.get("RAPIDAPI_KEY", "").strip()
 
     if not api_key:
         logger.info(
-            "AVIATIONSTACK_API_KEY not set — using existing schedules for %d flights",
+            "RAPIDAPI_KEY not set — using existing schedules for %d flights",
             len(flight_numbers),
         )
         return {fn: existing_schedules[fn] for fn in flight_numbers if fn in existing_schedules}
 
-    logger.info("Fetching schedules from AviationStack for %d flights", len(flight_numbers))
-    api_results = _fetch_from_aviationstack(flight_numbers, api_key)
+    logger.info("Fetching schedules from AeroDataBox for %d flights", len(flight_numbers))
+    api_results = _fetch_from_aerodatabox(flight_numbers, api_key)
 
-    # Merge: API results take precedence, fall back to existing
     merged: dict[str, dict] = {}
     for fn in flight_numbers:
         if fn in api_results:
@@ -182,7 +193,7 @@ def get_schedules(
             logger.debug("No schedule data for %s", fn)
 
     logger.info(
-        "get_schedules: %d/%d flights resolved (%d from API, %d from fallback)",
+        "get_schedules: %d/%d resolved (%d from API, %d from fallback)",
         len(merged),
         len(flight_numbers),
         len(api_results),

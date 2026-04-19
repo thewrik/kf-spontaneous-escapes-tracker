@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import Fuse from 'fuse.js'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import './App.css'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -14,65 +14,29 @@ const BOOKING_URLS = {
 const S = {
   app: {
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)',
+    background: 'var(--app-bg)',
     fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
-    color: '#e8eaf6',
-    padding: '0 0 60px 0',
+    color: 'var(--text)',
   },
   header: {
-    background: 'linear-gradient(90deg, #1a237e 0%, #283593 100%)',
-    borderBottom: '1px solid #3949ab',
-    padding: '20px 24px',
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
+    background: 'var(--header-bg)',
+    borderBottom: '1px solid var(--header-border)',
   },
-  headerTitle: {
-    margin: 0,
-    fontSize: '22px',
-    fontWeight: 700,
-    letterSpacing: '0.5px',
-    color: '#fff',
-  },
-  headerSub: {
-    fontSize: '12px',
-    color: '#90caf9',
-    marginTop: '2px',
-  },
-  lastUpdated: {
-    fontSize: '11px',
-    color: '#7986cb',
-    textAlign: 'right',
-  },
+  headerTitle: { margin: 0, fontSize: '22px', fontWeight: 700, letterSpacing: '0.5px', color: '#fff' },
+  headerSub: { fontSize: '12px', color: '#90caf9', marginTop: '2px' },
+  lastUpdated: { fontSize: '11px', color: 'var(--text-muted)', textAlign: 'right' },
   filtersPanel: {
-    background: 'rgba(26,35,126,0.35)',
+    background: 'var(--panel-bg)',
     backdropFilter: 'blur(8px)',
-    borderBottom: '1px solid rgba(57,73,171,0.4)',
-    padding: '16px 24px',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-    gap: '12px',
-    alignItems: 'end',
+    borderBottom: '1px solid var(--panel-border)',
   },
-  filterGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  label: {
-    fontSize: '11px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.8px',
-    color: '#90caf9',
-  },
+  filterGroup: {},
+  label: { fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--text-accent)' },
   input: {
-    background: 'rgba(13,31,60,0.8)',
-    border: '1px solid #3949ab',
+    background: 'var(--input-bg)',
+    border: '1px solid var(--border)',
     borderRadius: '6px',
-    color: '#e8eaf6',
+    color: 'var(--text)',
     padding: '8px 12px',
     fontSize: '13px',
     outline: 'none',
@@ -80,10 +44,10 @@ const S = {
     boxSizing: 'border-box',
   },
   select: {
-    background: 'rgba(13,31,60,0.8)',
-    border: '1px solid #3949ab',
+    background: 'var(--input-bg)',
+    border: '1px solid var(--border)',
     borderRadius: '6px',
-    color: '#e8eaf6',
+    color: 'var(--text)',
     padding: '8px 12px',
     fontSize: '13px',
     outline: 'none',
@@ -91,16 +55,12 @@ const S = {
     boxSizing: 'border-box',
     cursor: 'pointer',
   },
-  dayToggleRow: {
-    display: 'flex',
-    gap: '6px',
-    flexWrap: 'wrap',
-  },
+  dayToggleRow: { display: 'flex', gap: '6px', flexWrap: 'wrap' },
   dayBtn: (active) => ({
-    background: active ? '#3949ab' : 'rgba(13,31,60,0.8)',
-    border: `1px solid ${active ? '#5c6bc0' : '#3949ab'}`,
+    background: active ? 'var(--btn-active-bg)' : 'var(--btn-bg)',
+    border: `1px solid ${active ? 'var(--btn-active-border)' : 'var(--border)'}`,
     borderRadius: '5px',
-    color: active ? '#fff' : '#7986cb',
+    color: active ? 'var(--btn-active-color)' : 'var(--btn-color)',
     padding: '5px 8px',
     fontSize: '11px',
     fontWeight: 600,
@@ -109,96 +69,55 @@ const S = {
     minWidth: '36px',
     textAlign: 'center',
   }),
-  flexModeRow: {
-    display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
+  flexModeRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
   flexBtn: (active) => ({
-    background: active ? '#1565c0' : 'rgba(13,31,60,0.8)',
-    border: `1px solid ${active ? '#1976d2' : '#3949ab'}`,
+    background: active ? 'var(--flex-active-bg)' : 'var(--btn-bg)',
+    border: `1px solid ${active ? 'var(--flex-active-border)' : 'var(--border)'}`,
     borderRadius: '5px',
-    color: active ? '#fff' : '#7986cb',
+    color: active ? '#fff' : 'var(--btn-color)',
     padding: '5px 10px',
     fontSize: '11px',
     cursor: 'pointer',
     transition: 'all 0.15s',
   }),
-  sliderWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  slider: {
-    flex: 1,
-    accentColor: '#5c6bc0',
-    cursor: 'pointer',
-  },
-  sliderVal: {
-    fontSize: '13px',
-    fontWeight: 700,
-    color: '#90caf9',
-    minWidth: '20px',
-    textAlign: 'right',
-  },
-  main: {
-    maxWidth: '1100px',
-    margin: '0 auto',
-    padding: '20px 16px',
-  },
-  statsBar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-    marginBottom: '16px',
-    flexWrap: 'wrap',
-  },
+  sliderWrap: { display: 'flex', alignItems: 'center', gap: '10px' },
+  slider: { flex: 1, accentColor: 'var(--text-muted)', cursor: 'pointer' },
+  sliderVal: { fontSize: '13px', fontWeight: 700, color: 'var(--text-accent)', minWidth: '20px', textAlign: 'right' },
+  main: {},
+  statsBar: {},
   statsBadge: {
-    background: 'rgba(57,73,171,0.3)',
-    border: '1px solid #3949ab',
+    background: 'var(--badge-bg)',
+    border: '1px solid var(--badge-border)',
     borderRadius: '20px',
     padding: '4px 14px',
     fontSize: '12px',
-    color: '#90caf9',
+    color: 'var(--text-accent)',
   },
   sortSelect: {
-    background: 'rgba(13,31,60,0.8)',
-    border: '1px solid #3949ab',
+    background: 'var(--sort-bg)',
+    border: '1px solid var(--border)',
     borderRadius: '6px',
-    color: '#e8eaf6',
+    color: 'var(--text)',
     padding: '6px 10px',
     fontSize: '12px',
     outline: 'none',
     cursor: 'pointer',
     marginLeft: 'auto',
   },
-  cardGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-    gap: '14px',
-  },
+  cardGrid: {},
   card: (expanded) => ({
     background: expanded
-      ? 'linear-gradient(135deg, rgba(21,101,192,0.25) 0%, rgba(26,35,126,0.35) 100%)'
-      : 'linear-gradient(135deg, rgba(13,31,60,0.9) 0%, rgba(20,28,60,0.95) 100%)',
-    border: `1px solid ${expanded ? '#1976d2' : 'rgba(57,73,171,0.5)'}`,
+      ? 'linear-gradient(135deg, var(--card-exp-from) 0%, var(--card-exp-to) 100%)'
+      : 'linear-gradient(135deg, var(--card-from) 0%, var(--card-to) 100%)',
+    border: `1px solid ${expanded ? '#1976d2' : 'var(--card-border)'}`,
     borderRadius: '10px',
     overflow: 'hidden',
     transition: 'border-color 0.2s, box-shadow 0.2s',
-    boxShadow: expanded ? '0 0 20px rgba(25,118,210,0.25)' : '0 2px 8px rgba(0,0,0,0.3)',
+    boxShadow: expanded ? '0 0 20px var(--card-shadow-exp)' : '0 2px 8px var(--card-shadow)',
     cursor: 'pointer',
   }),
-  cardHeader: {
-    padding: '14px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  cardTop: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  cardHeader: { padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' },
+  cardTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   airlineBadge: (airline) => ({
     background: airline === 'SQ' ? 'rgba(26,35,126,0.8)' : 'rgba(0,100,0,0.6)',
     border: `1px solid ${airline === 'SQ' ? '#3f51b5' : '#2e7d32'}`,
@@ -210,43 +129,20 @@ const S = {
     letterSpacing: '0.5px',
   }),
   cabinBadge: (cabin) => ({
-    background: cabin === 'Business' ? 'rgba(120,60,0,0.5)' : 'rgba(13,31,60,0.6)',
-    border: `1px solid ${cabin === 'Business' ? '#f57c00' : '#37474f'}`,
+    background: cabin === 'Business' ? 'rgba(120,60,0,0.5)' : 'rgba(57,73,171,0.2)',
+    border: `1px solid ${cabin === 'Business' ? '#f57c00' : 'var(--border)'}`,
     borderRadius: '4px',
     padding: '2px 8px',
     fontSize: '11px',
-    color: cabin === 'Business' ? '#ffcc80' : '#90a4ae',
+    color: cabin === 'Business' ? '#ffcc80' : 'var(--text-dim)',
   }),
-  routeRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  cityText: {
-    fontSize: '17px',
-    fontWeight: 700,
-    color: '#e3f2fd',
-  },
-  arrowText: {
-    fontSize: '16px',
-    color: '#5c6bc0',
-  },
-  milesRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '8px',
-  },
-  milesNum: {
-    fontSize: '22px',
-    fontWeight: 800,
-    color: '#ffd740',
-    lineHeight: 1,
-  },
-  milesLabel: {
-    fontSize: '12px',
-    color: '#90a4ae',
-  },
-  discountBadge: (pct) => ({
+  routeRow: { display: 'flex', alignItems: 'center', gap: '10px' },
+  cityText: { fontSize: '17px', fontWeight: 700, color: 'var(--text)' },
+  arrowText: { fontSize: '16px', color: 'var(--text-muted)' },
+  milesRow: { display: 'flex', alignItems: 'baseline', gap: '8px' },
+  milesNum: { fontSize: '22px', fontWeight: 800, color: 'var(--miles-color)', lineHeight: 1 },
+  milesLabel: { fontSize: '12px', color: 'var(--text-dim)' },
+  discountBadge: () => ({
     background: 'rgba(46,125,50,0.4)',
     border: '1px solid #388e3c',
     borderRadius: '4px',
@@ -255,68 +151,38 @@ const S = {
     color: '#81c784',
     fontWeight: 700,
   }),
-  datesRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '5px',
-    marginTop: '4px',
-  },
-  datePip: (avail) => ({
-    background: avail ? 'rgba(46,125,50,0.35)' : 'rgba(100,0,0,0.3)',
-    border: `1px solid ${avail ? '#388e3c' : '#c62828'}`,
+  datesRow: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '4px' },
+  datePip: () => ({
+    background: 'rgba(46,125,50,0.35)',
+    border: '1px solid #388e3c',
     borderRadius: '4px',
     padding: '2px 7px',
     fontSize: '10px',
-    color: avail ? '#a5d6a7' : '#ef9a9a',
+    color: '#a5d6a7',
     fontWeight: 600,
   }),
-  availCount: {
-    fontSize: '11px',
-    color: '#7986cb',
-    marginTop: '4px',
-  },
+  availCount: { fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' },
   drawer: {
-    borderTop: '1px solid rgba(57,73,171,0.4)',
+    borderTop: '1px solid var(--drawer-border)',
     padding: '14px 16px',
-    background: 'rgba(0,0,0,0.2)',
+    background: 'var(--drawer-bg)',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
   },
-  drawerSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  drawerLabel: {
-    fontSize: '10px',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.8px',
-    color: '#7986cb',
-  },
-  flightList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
+  drawerSection: { display: 'flex', flexDirection: 'column', gap: '6px' },
+  drawerLabel: { fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--text-muted)' },
+  flightList: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
   flightChip: {
-    background: 'rgba(26,35,126,0.5)',
-    border: '1px solid #3f51b5',
+    background: 'var(--chip-bg)',
+    border: '1px solid var(--chip-border)',
     borderRadius: '6px',
     padding: '6px 10px',
     fontSize: '12px',
-    color: '#c5cae9',
+    color: 'var(--chip-color)',
   },
-  flightNum: {
-    fontWeight: 700,
-    color: '#90caf9',
-    marginBottom: '2px',
-  },
-  flightTime: {
-    fontSize: '11px',
-    color: '#7986cb',
-  },
+  flightNum: { fontWeight: 700, color: 'var(--text-accent)', marginBottom: '2px' },
+  flightTime: { fontSize: '11px', color: 'var(--text-muted)' },
   bookBtn: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -337,50 +203,22 @@ const S = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
-    background: 'rgba(57,73,171,0.3)',
-    border: '1px solid #3949ab',
+    background: 'var(--copy-btn-bg)',
+    border: '1px solid var(--border)',
     borderRadius: '7px',
-    color: '#90caf9',
+    color: 'var(--copy-btn-color)',
     fontWeight: 600,
     fontSize: '12px',
     padding: '8px 14px',
     cursor: 'pointer',
     transition: 'all 0.15s',
   },
-  drawerActions: {
-    display: 'flex',
-    gap: '10px',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-  },
-  copyConfirm: {
-    fontSize: '11px',
-    color: '#81c784',
-    fontWeight: 600,
-  },
-  loadingWrap: {
-    textAlign: 'center',
-    padding: '80px 20px',
-    color: '#5c6bc0',
-    fontSize: '18px',
-  },
-  errorWrap: {
-    textAlign: 'center',
-    padding: '80px 20px',
-    color: '#ef5350',
-    fontSize: '16px',
-  },
-  emptyWrap: {
-    textAlign: 'center',
-    padding: '60px 20px',
-    color: '#5c6bc0',
-    fontSize: '15px',
-  },
-  blackoutList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-  },
+  drawerActions: { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' },
+  copyConfirm: { fontSize: '11px', color: '#81c784', fontWeight: 600 },
+  loadingWrap: { textAlign: 'center', padding: '80px 20px', color: 'var(--text-muted)', fontSize: '18px' },
+  errorWrap: { textAlign: 'center', padding: '80px 20px', color: '#ef5350', fontSize: '16px' },
+  emptyWrap: { textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)', fontSize: '15px' },
+  blackoutList: { display: 'flex', flexWrap: 'wrap', gap: '4px' },
   blackoutPip: {
     background: 'rgba(180,0,0,0.25)',
     border: '1px solid #c62828',
@@ -393,7 +231,7 @@ const S = {
     display: 'inline-block',
     marginLeft: 'auto',
     fontSize: '12px',
-    color: '#5c6bc0',
+    color: 'var(--text-muted)',
     transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
     transition: 'transform 0.2s',
   }),
@@ -438,6 +276,171 @@ function formatLastUpdated(iso) {
   } catch {
     return iso
   }
+}
+
+// ─── CityInput Component ──────────────────────────────────────────────────────
+
+function CityInput({ value, onChange, placeholder, iataMap }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!value) { setQuery(''); return }
+    const iata = iataMap[value]
+    setQuery(iata ? `${value} (${iata})` : value)
+  }, [value, iataMap])
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const matches = useMemo(() => {
+    const q = query.replace(/\s*\(.*\)\s*$/, '').toLowerCase().trim()
+    const entries = Object.entries(iataMap)
+    if (!q) return entries.map(([name, iata]) => ({ name, iata }))
+    return entries
+      .filter(([name, iata]) => name.toLowerCase().includes(q) || iata.toLowerCase().includes(q))
+      .map(([name, iata]) => ({ name, iata }))
+  }, [query, iataMap])
+
+  const select = (name, iata) => {
+    setQuery(iata ? `${name} (${iata})` : name)
+    onChange(name)
+    setOpen(false)
+  }
+
+  const handleChange = (e) => {
+    const raw = e.target.value
+    setQuery(raw)
+    onChange(raw.replace(/\s*\(.*\)\s*$/, '').trim())
+    setOpen(true)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flex: 1 }}>
+      <div style={{ position: 'relative' }}>
+        <input
+          style={{ ...S.input, paddingRight: query ? '28px' : '12px' }}
+          placeholder={placeholder}
+          value={query}
+          onChange={handleChange}
+          onFocus={() => setOpen(true)}
+        />
+        {query && (
+          <button
+            onMouseDown={(e) => { e.preventDefault(); setQuery(''); onChange(''); setOpen(false) }}
+            style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#7986cb', cursor: 'pointer', fontSize: '16px', padding: 0, lineHeight: 1 }}
+          >×</button>
+        )}
+      </div>
+      {open && matches.length > 0 && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--dropdown-bg)', border: '1px solid var(--dropdown-border)', borderRadius: '6px', zIndex: 200, overflowY: 'auto', maxHeight: '220px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+          {matches.map(({ name, iata }) => (
+            <div
+              key={`${name}-${iata}`}
+              onMouseDown={() => select(name, iata)}
+              style={{ padding: '9px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#e8eaf6', borderBottom: '1px solid rgba(57,73,171,0.25)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(57,73,171,0.35)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span>{name}</span>
+              <span style={{ color: '#90caf9', fontWeight: 700, fontFamily: 'monospace', fontSize: '12px' }}>{iata}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── MonthCalendar + DatePickerField Components ───────────────────────────────
+
+const MAY_FIRST_DOW = new Date('2026-05-01').getDay() // 5 = Friday
+
+function MonthCalendar({ selected, onChange }) {
+  const cells = [
+    ...Array(MAY_FIRST_DOW).fill(null),
+    ...Array.from({ length: 31 }, (_, i) => i + 1),
+  ]
+  return (
+    <div style={{ background: 'var(--calendar-bg)', border: '1px solid var(--border)', borderRadius: '8px 8px 0 0', padding: '12px' }}>
+      <div style={{ textAlign: 'center', fontWeight: 700, color: '#90caf9', marginBottom: '10px', fontSize: '13px', letterSpacing: '0.5px' }}>
+        May 2026
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center' }}>
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+          <div key={d} style={{ fontSize: '10px', color: '#7986cb', padding: '3px 0', fontWeight: 600 }}>{d}</div>
+        ))}
+        {cells.map((d, i) => {
+          if (!d) return <div key={`e${i}`} />
+          const iso = `2026-05-${String(d).padStart(2, '0')}`
+          const sel = selected === iso
+          return (
+            <div
+              key={d}
+              onMouseDown={() => onChange(sel ? '' : iso)}
+              style={{ padding: '6px 2px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: sel ? 700 : 400, background: sel ? '#1976d2' : 'transparent', color: sel ? '#fff' : '#e8eaf6', border: sel ? '1px solid #42a5f5' : '1px solid transparent', userSelect: 'none' }}
+              onMouseEnter={e => { if (!sel) e.currentTarget.style.background = 'rgba(57,73,171,0.35)' }}
+              onMouseLeave={e => { if (!sel) e.currentTarget.style.background = 'transparent' }}
+            >{d}</div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function DatePickerField({ selected, onChange, flexDays, onFlexChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const display = selected
+    ? new Date(selected + 'T12:00:00').toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' })
+    : ''
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flex: 1 }}>
+      <div style={{ position: 'relative' }}>
+        <input
+          readOnly
+          style={{ ...S.input, cursor: 'pointer', paddingRight: selected ? '28px' : '12px' }}
+          placeholder="Any date in May"
+          value={display}
+          onMouseDown={() => setOpen(o => !o)}
+        />
+        {selected && (
+          <button
+            onMouseDown={(e) => { e.preventDefault(); onChange(''); onFlexChange(0) }}
+            style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#7986cb', cursor: 'pointer', fontSize: '16px', padding: 0, lineHeight: 1 }}
+          >×</button>
+        )}
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', borderRadius: '8px', minWidth: '240px' }}>
+          <MonthCalendar selected={selected} onChange={(d) => { onChange(d) }} />
+          <div style={{ background: 'var(--calendar-bg)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '10px 12px' }}>
+            <div style={{ ...S.label, marginBottom: '6px' }}>Flexible ±</div>
+            <div style={S.flexModeRow}>
+              {[0, 1, 2, 3].map(n => (
+                <button key={n} style={S.flexBtn(flexDays === n)} onMouseDown={() => onFlexChange(n)}>
+                  {n === 0 ? 'Exact' : `±${n}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── FlightCard Component ─────────────────────────────────────────────────────
@@ -584,10 +587,11 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const [theme, setTheme] = useState('night')
+
   // Filter state
-  const [citySearch, setCitySearch] = useState('')
-  const [fromFilter, setFromFilter] = useState('All')
-  const [toFilter, setToFilter] = useState('All')
+  const [fromFilter, setFromFilter] = useState('')
+  const [toFilter, setToFilter] = useState('')
   const [airlineFilter, setAirlineFilter] = useState('All')
   const [cabinFilter, setCabinFilter] = useState('All')
   const [activeDays, setActiveDays] = useState([]) // empty = all days
@@ -616,22 +620,15 @@ export default function App() {
       })
   }, [])
 
-  // Derived city lists
-  const cities = useMemo(() => {
-    if (!data) return { from: [], to: [] }
-    const froms = [...new Set(data.routes.map((r) => r.from))].sort()
-    const tos = [...new Set(data.routes.map((r) => r.to))].sort()
-    return { from: froms, to: tos }
-  }, [data])
-
-  // Fuse search instance
-  const fuse = useMemo(() => {
-    if (!data) return null
-    return new Fuse(data.routes, {
-      keys: ['from', 'to'],
-      threshold: 0.35,
-      includeScore: true,
-    })
+  // IATA map: city name → IATA code (from data + any route cities not in dict)
+  const iataMap = useMemo(() => {
+    if (!data) return {}
+    const map = { ...data.iata }
+    for (const r of data.routes) {
+      if (!map[r.from]) map[r.from] = ''
+      if (!map[r.to]) map[r.to] = ''
+    }
+    return map
   }, [data])
 
   // Filtered + sorted routes
@@ -640,15 +637,9 @@ export default function App() {
 
     let routes = data.routes
 
-    // Fuzzy city search across from+to
-    if (citySearch.trim()) {
-      const results = fuse.search(citySearch.trim())
-      routes = results.map((r) => r.item)
-    }
-
-    // Dropdown from/to
-    if (fromFilter !== 'All') routes = routes.filter((r) => r.from === fromFilter)
-    if (toFilter !== 'All') routes = routes.filter((r) => r.to === toFilter)
+    // Text from/to (case-insensitive substring match)
+    if (fromFilter.trim()) routes = routes.filter((r) => r.from.toLowerCase().includes(fromFilter.trim().toLowerCase()))
+    if (toFilter.trim()) routes = routes.filter((r) => r.to.toLowerCase().includes(toFilter.trim().toLowerCase()))
 
     // Airline / cabin
     if (airlineFilter !== 'All') routes = routes.filter((r) => r.airline === airlineFilter)
@@ -693,7 +684,7 @@ export default function App() {
     else if (sortBy === 'most-dates') routes.sort((a, b) => availableDates(b).length - availableDates(a).length)
 
     return routes
-  }, [data, citySearch, fuse, fromFilter, toFilter, airlineFilter, cabinFilter,
+  }, [data, fromFilter, toFilter, airlineFilter, cabinFilter,
     activeDays, specificDate, flexDays, minAvailDates, sortBy])
 
   const toggleDay = (d) => {
@@ -709,9 +700,8 @@ export default function App() {
   }, [])
 
   const resetFilters = () => {
-    setCitySearch('')
-    setFromFilter('All')
-    setToFilter('All')
+    setFromFilter('')
+    setToFilter('')
     setAirlineFilter('All')
     setCabinFilter('All')
     setActiveDays([])
@@ -725,7 +715,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={S.app}>
+      <div style={S.app} data-theme={theme}>
         <div style={S.loadingWrap}>Loading flight data...</div>
       </div>
     )
@@ -733,7 +723,7 @@ export default function App() {
 
   if (error) {
     return (
-      <div style={S.app}>
+      <div style={S.app} data-theme={theme}>
         <div style={S.errorWrap}>
           Failed to load flight data: {error}
           <br />
@@ -746,78 +736,76 @@ export default function App() {
   }
 
   return (
-    <div style={S.app}>
+    <div style={S.app} data-theme={theme}>
       {/* Header */}
-      <div style={S.header}>
+      <div style={S.header} className="app-header">
         <div>
           <h1 style={S.headerTitle}>KrisFlyer Spontaneous Escapes</h1>
           <div style={S.headerSub}>
             {data.meta.month} · Book by {data.meta.bookBy}
           </div>
         </div>
-        <div style={S.lastUpdated}>
-          Last updated:<br />
-          <span style={{ color: '#90caf9' }}>{formatLastUpdated(data.meta.lastUpdated)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={S.lastUpdated}>
+            Last updated:<br />
+            <span style={{ color: '#90caf9' }}>{formatLastUpdated(data.meta.lastUpdated)}</span>
+          </div>
+          <button
+            onClick={() => setTheme(t => t === 'night' ? 'day' : 'night')}
+            title={theme === 'night' ? 'Switch to day mode' : 'Switch to night mode'}
+            style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', color: '#fff', fontSize: '18px', padding: '6px 10px', cursor: 'pointer', lineHeight: 1 }}
+          >
+            {theme === 'night' ? '☀️' : '🌙'}
+          </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div style={S.filtersPanel}>
-        {/* City search */}
-        <div style={{ ...S.filterGroup, gridColumn: 'span 2' }}>
-          <label style={S.label}>Search City (Fuzzy)</label>
-          <input
-            style={S.input}
-            placeholder="e.g. Bali, Tokyo, Manila..."
-            value={citySearch}
-            onChange={(e) => setCitySearch(e.target.value)}
-          />
-        </div>
-
-        {/* From dropdown */}
-        <div style={S.filterGroup}>
-          <label style={S.label}>From</label>
-          <select style={S.select} value={fromFilter} onChange={(e) => setFromFilter(e.target.value)}>
-            <option value="All">All Origins</option>
-            {cities.from.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* To dropdown */}
-        <div style={S.filterGroup}>
-          <label style={S.label}>To</label>
-          <select style={S.select} value={toFilter} onChange={(e) => setToFilter(e.target.value)}>
-            <option value="All">All Destinations</option>
-            {cities.to.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+      <div style={S.filtersPanel} className="filters-panel">
+        {/* From / swap / To */}
+        <div className="filter-from-to">
+          <div className="filter-group" style={{ flex: 1 }}>
+            <label style={S.label}>From</label>
+            <CityInput value={fromFilter} onChange={setFromFilter} placeholder="City or IATA" iataMap={iataMap} />
+          </div>
+          <button
+            className="swap-btn"
+            title="Swap"
+            style={{ background: 'rgba(57,73,171,0.3)', border: '1px solid #3949ab', borderRadius: '6px', color: '#90caf9', fontSize: '16px', padding: '7px 10px', cursor: 'pointer' }}
+            onClick={() => { setFromFilter(toFilter); setToFilter(fromFilter) }}
+          >⇄</button>
+          <div className="filter-group" style={{ flex: 1 }}>
+            <label style={S.label}>To</label>
+            <CityInput value={toFilter} onChange={setToFilter} placeholder="City or IATA" iataMap={iataMap} />
+          </div>
         </div>
 
         {/* Airline */}
-        <div style={S.filterGroup}>
+        <div className="filter-group">
           <label style={S.label}>Airline</label>
-          <select style={S.select} value={airlineFilter} onChange={(e) => setAirlineFilter(e.target.value)}>
-            <option value="All">All Airlines</option>
-            <option value="SQ">SQ — Singapore Airlines</option>
-            <option value="TR">TR — Scoot</option>
-          </select>
+          <div style={S.dayToggleRow}>
+            {['All', 'SQ', 'TR'].map((a) => (
+              <button key={a} style={S.dayBtn(airlineFilter === a)} onClick={() => setAirlineFilter(a)}>
+                {a === 'All' ? 'All' : a}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Cabin */}
-        <div style={S.filterGroup}>
+        <div className="filter-group">
           <label style={S.label}>Cabin</label>
-          <select style={S.select} value={cabinFilter} onChange={(e) => setCabinFilter(e.target.value)}>
-            <option value="All">All Cabins</option>
-            <option value="Economy">Economy</option>
-            <option value="Business">Business</option>
-          </select>
+          <div style={S.dayToggleRow}>
+            {['All', 'Economy', 'Business'].map((c) => (
+              <button key={c} style={S.dayBtn(cabinFilter === c)} onClick={() => setCabinFilter(c)}>
+                {c === 'All' ? 'All' : c === 'Economy' ? 'Eco' : 'Biz'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Day of week */}
-        <div style={S.filterGroup}>
+        <div className="filter-group filter-days">
           <label style={S.label}>Day of Week</label>
           <div style={S.dayToggleRow}>
             {DAYS.map((day, i) => (
@@ -828,33 +816,19 @@ export default function App() {
           </div>
         </div>
 
-        {/* Specific date */}
-        <div style={S.filterGroup}>
-          <label style={S.label}>Specific Date</label>
-          <input
-            type="date"
-            style={S.input}
-            min="2026-05-01"
-            max="2026-05-31"
-            value={specificDate}
-            onChange={(e) => setSpecificDate(e.target.value)}
+        {/* Date picker */}
+        <div className="filter-group filter-date">
+          <label style={S.label}>Date</label>
+          <DatePickerField
+            selected={specificDate}
+            onChange={setSpecificDate}
+            flexDays={flexDays}
+            onFlexChange={setFlexDays}
           />
         </div>
 
-        {/* Flexible ±days */}
-        <div style={S.filterGroup}>
-          <label style={S.label}>Flexible ± Days</label>
-          <div style={S.flexModeRow}>
-            {[0, 1, 2, 3].map((n) => (
-              <button key={n} style={S.flexBtn(flexDays === n)} onClick={() => setFlexDays(n)}>
-                {n === 0 ? 'Exact' : `±${n}`}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Min available dates */}
-        <div style={S.filterGroup}>
+        <div className="filter-group filter-slider">
           <label style={S.label}>Min Available Dates: <span style={{ color: '#ffd740' }}>{minAvailDates}</span></label>
           <div style={S.sliderWrap}>
             <input
@@ -870,20 +844,19 @@ export default function App() {
         </div>
 
         {/* Reset */}
-        <div style={S.filterGroup}>
-          <label style={S.label}>&nbsp;</label>
+        <div className="filter-reset">
           <button
-            style={{ ...S.copyBtn, alignSelf: 'flex-end', padding: '8px 16px', fontSize: '12px' }}
+            style={{ ...S.copyBtn, padding: '8px 16px', fontSize: '12px' }}
             onClick={resetFilters}
           >
-            Reset Filters
+            Reset
           </button>
         </div>
       </div>
 
       {/* Main content */}
-      <div style={S.main}>
-        <div style={S.statsBar}>
+      <div className="main-content">
+        <div className="stats-bar">
           <span style={S.statsBadge}>{filtered.length} route{filtered.length !== 1 ? 's' : ''} shown</span>
           <span style={S.statsBadge}>
             {filtered.filter((r) => r.airline === 'SQ').length} SQ
@@ -910,7 +883,7 @@ export default function App() {
             </span>
           </div>
         ) : (
-          <div style={S.cardGrid}>
+          <div className="card-grid">
             {filtered.map((route) => {
               const id = cardId(route)
               return (

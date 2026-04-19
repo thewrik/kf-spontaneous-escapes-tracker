@@ -26,6 +26,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 # Ensure scraper/ is on the path regardless of cwd
 SCRAPER_DIR = Path(__file__).parent
 DATA_JSON = SCRAPER_DIR.parent / "data" / "flights.json"
